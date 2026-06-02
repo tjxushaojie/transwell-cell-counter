@@ -1,3 +1,13 @@
+---
+title: Transwell Cell Counter
+emoji: 🔬
+colorFrom: blue
+colorTo: purple
+sdk: docker
+pinned: false
+license: mit
+---
+
 # Transwell Cell Counter
 
 Web app for counting stained cells in Transwell migration/invasion images.
