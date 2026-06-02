@@ -5,7 +5,7 @@ import sys
 from PIL import Image, ImageDraw
 
 sys.path.append(str(__import__("pathlib").Path(__file__).resolve().parents[1]))
-from transwell_counter import CounterParams, count_cells
+from transwell_counter import CounterParams, auto_tune_params, count_cells
 
 
 def make_synthetic_transwell() -> Image.Image:
@@ -38,6 +38,11 @@ def main() -> None:
     print(f"synthetic_count={result.count}")
     assert result.count >= 6, "Synthetic stained cells were not detected."
     assert result.count <= 12, "Synthetic hollow pores may be over-counted."
+
+    tuned = auto_tune_params(image)
+    tuned_result = count_cells(image, tuned.params)
+    print(f"synthetic_auto_tuned_count={tuned_result.count}")
+    assert 6 <= tuned_result.count <= 12, "Auto tune did not find a useful parameter set."
 
 
 if __name__ == "__main__":
