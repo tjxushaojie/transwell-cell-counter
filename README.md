@@ -18,7 +18,7 @@ The app is designed for images where cells are purple/blue stained and membrane 
 Deploy this repository with one of these free web-app hosts:
 
 - Streamlit Community Cloud: connect your GitHub repository and set `app.py` as the app entry point.
-- Hugging Face Spaces: create a new Streamlit Space and push this repository.
+- Hugging Face Spaces: create a Docker Space and push this repository. The included `Dockerfile` starts the Streamlit app with Python 3.12.
 
 After deployment, users only need to open the web URL and upload images. No Windows installation is required.
 

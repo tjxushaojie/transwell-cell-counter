@@ -1,6 +1,6 @@
 # Deployment Guide
 
-This project is ready for GitHub-based web deployment. The simplest path is Streamlit Community Cloud.
+This project is ready for GitHub-based web deployment. If Streamlit Community Cloud blocks your account with a fair-use `403`, use the Hugging Face Spaces Docker option.
 
 ## Option A: Streamlit Community Cloud
 
@@ -19,20 +19,28 @@ app.py
 
 Streamlit will install dependencies from `requirements.txt` and run the app from the repository root.
 
-## Option B: Hugging Face Spaces
+If deployment tries to use Python 3.14 and compiles scientific packages from source, set the Python version to 3.12 in advanced settings. This repository also includes `runtime.txt` with `python-3.12`.
 
-Hugging Face Spaces can host Streamlit apps, but the built-in Streamlit SDK path has changed over time. For new Spaces, follow the current Hugging Face Streamlit template or Docker-based Streamlit instructions.
+## Option B: Hugging Face Spaces Docker
 
-The app entry file is still:
+Use this option if Streamlit Community Cloud shows a fair-use `403` block.
+
+1. Create a Hugging Face account.
+2. Create a new Space at `https://huggingface.co/new-space`.
+3. Choose:
 
 ```text
-app.py
+Space SDK: Docker
+Visibility: Public
 ```
 
-The dependency file is:
+4. Push this repository to the Space repository, or import/sync the GitHub repository.
+5. Hugging Face will build the included `Dockerfile`.
+
+The Docker image uses Python 3.12 and starts:
 
 ```text
-requirements.txt
+streamlit run app.py --server.address 0.0.0.0 --server.port 8501
 ```
 
 ## Publishing Raw Images
