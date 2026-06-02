@@ -363,9 +363,18 @@ def main() -> None:
     with st.expander("What this app does", expanded=False):
         st.markdown(
             """
-            This app looks for solid purple/blue stained cells, then filters out hollow membrane pores by checking
-            shape, hollow ratio, and whether the object center is stained. After uploading an image, use **Compare**
-            to hold-toggle between the original image and the annotated result.
+            **How it differs from ImageJ threshold counting:** ImageJ-style workflows often rely on intensity
+            thresholds, so hollow membrane pores and stained cells can be confused. This app combines stain color,
+            local background correction, object shape, hollow ratio, and center stain intensity to prefer solid
+            purple/blue cells while rejecting ring-like pores.
+
+            **Other possible uses:** it may also help count other bright-field objects that are solidly stained
+            and visually distinct from hollow/background texture, such as crystal-violet colony spots, stained
+            migrated cells, or similar microscopy counting tasks.
+
+            **Not ideal for:** fluorescence nuclei, phase-contrast cells without color staining, overlapping dense
+            cell sheets, or images where the target objects and background pores have the same color/shape.
+            Use **Compare** to hold-toggle between the original image and the annotated result.
             """
         )
 
