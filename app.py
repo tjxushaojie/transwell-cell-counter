@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import base64
 from io import BytesIO
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 from PIL import Image
 
 from transwell_counter import CounterParams, count_cells, load_rgb_image
@@ -19,6 +21,11 @@ def png_bytes(image: Image.Image) -> bytes:
     return buffer.getvalue()
 
 
+def image_data_uri(image: Image.Image) -> str:
+    encoded = base64.b64encode(png_bytes(image)).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
 def csv_bytes(frame: pd.DataFrame) -> bytes:
     return frame.to_csv(index=False).encode("utf-8-sig")
 
@@ -29,6 +36,20 @@ def read_uploaded_image(uploaded_file) -> Image.Image:
 
 def sidebar_params() -> tuple[CounterParams, bool]:
     st.sidebar.header("Detection settings")
+    with st.sidebar.expander("How to tune these settings", expanded=False):
+        st.markdown(
+            """
+            Start with the defaults, then adjust only after checking the annotated image.
+
+            - Too many membrane pores counted: raise **Minimum center stain** or lower **Maximum hollow ratio**.
+            - Faint cells are missed: raise **Sensitivity** a little.
+            - Tiny debris is counted: raise **Minimum area**.
+            - Large stained clumps are ignored: raise **Maximum area**.
+            - Touching cells are counted as one: lower **Cell splitting distance**.
+
+            Change one setting at a time and re-check the overlay.
+            """
+        )
     sensitivity = st.sidebar.slider(
         "Sensitivity",
         0.0,
@@ -87,6 +108,100 @@ def sidebar_params() -> tuple[CounterParams, bool]:
     return params, show_numbers
 
 
+def render_hold_compare(original: Image.Image, annotated: Image.Image) -> None:
+    original_uri = image_data_uri(original)
+    annotated_uri = image_data_uri(annotated)
+    components.html(
+        f"""
+        <style>
+          .tw-compare {{
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            max-width: 100%;
+          }}
+          .tw-frame {{
+            position: relative;
+            border: 1px solid #d8dde6;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #f7f8fa;
+          }}
+          .tw-frame img {{
+            width: 100%;
+            display: block;
+            user-select: none;
+            -webkit-user-drag: none;
+          }}
+          .tw-badge {{
+            position: absolute;
+            left: 12px;
+            top: 12px;
+            background: rgba(17, 24, 39, 0.82);
+            color: #fff;
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-size: 14px;
+            line-height: 1.2;
+          }}
+          .tw-button {{
+            margin-top: 10px;
+            border: 1px solid #c9ced8;
+            border-radius: 6px;
+            background: #ffffff;
+            color: #111827;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 600;
+            padding: 8px 13px;
+          }}
+          .tw-button:active {{
+            background: #eef2f7;
+          }}
+          .tw-hint {{
+            color: #5b6472;
+            font-size: 13px;
+            margin-top: 7px;
+          }}
+        </style>
+        <div class="tw-compare">
+          <div class="tw-frame">
+            <img id="tw-image" src="{annotated_uri}" alt="Annotated Transwell image">
+            <div id="tw-badge" class="tw-badge">Annotated image</div>
+          </div>
+          <button id="tw-toggle" class="tw-button" type="button">Hold to view original</button>
+          <div class="tw-hint">Press and hold the button to hide circles. Release to return to the annotated result.</div>
+        </div>
+        <script>
+          const img = document.getElementById("tw-image");
+          const badge = document.getElementById("tw-badge");
+          const button = document.getElementById("tw-toggle");
+          const annotated = "{annotated_uri}";
+          const original = "{original_uri}";
+
+          function showOriginal() {{
+            img.src = original;
+            badge.textContent = "Original image";
+          }}
+          function showAnnotated() {{
+            img.src = annotated;
+            badge.textContent = "Annotated image";
+          }}
+
+          button.addEventListener("mousedown", showOriginal);
+          button.addEventListener("mouseup", showAnnotated);
+          button.addEventListener("mouseleave", showAnnotated);
+          button.addEventListener("touchstart", function(event) {{
+            event.preventDefault();
+            showOriginal();
+          }}, {{ passive: false }});
+          button.addEventListener("touchend", showAnnotated);
+          button.addEventListener("touchcancel", showAnnotated);
+        </script>
+        """,
+        height=760,
+        scrolling=True,
+    )
+
+
 def render_result(image: Image.Image, params: CounterParams, file_stem: str, show_numbers: bool) -> None:
     with st.spinner("Analyzing image..."):
         result = count_cells(image, params, show_numbers=show_numbers)
@@ -97,8 +212,10 @@ def render_result(image: Image.Image, params: CounterParams, file_stem: str, sho
     metric_cols[2].metric("Mean area", f"{result.detections['area_px'].mean():.0f} px" if result.count else "-")
     metric_cols[3].metric("Median diameter", f"{result.detections['diameter_px'].median():.1f} px" if result.count else "-")
 
-    tabs = st.tabs(["Annotated image", "Mask", "Stain score", "Cell table"])
+    tabs = st.tabs(["Compare", "Annotated image", "Mask", "Stain score"])
     with tabs[0]:
+        render_hold_compare(image, result.annotated_image)
+    with tabs[1]:
         st.image(result.annotated_image, use_column_width=True)
         st.download_button(
             "Download annotated image",
@@ -106,7 +223,7 @@ def render_result(image: Image.Image, params: CounterParams, file_stem: str, sho
             file_name=f"{file_stem}_annotated.png",
             mime="image/png",
         )
-    with tabs[1]:
+    with tabs[2]:
         st.image(result.mask_image, use_column_width=True)
         st.download_button(
             "Download mask",
@@ -114,21 +231,13 @@ def render_result(image: Image.Image, params: CounterParams, file_stem: str, sho
             file_name=f"{file_stem}_mask.png",
             mime="image/png",
         )
-    with tabs[2]:
+    with tabs[3]:
         st.image(result.score_image, use_column_width=True)
         st.download_button(
             "Download stain score",
             data=png_bytes(result.score_image),
             file_name=f"{file_stem}_score.png",
             mime="image/png",
-        )
-    with tabs[3]:
-        st.dataframe(result.detections, use_container_width=True, height=520)
-        st.download_button(
-            "Download CSV",
-            data=csv_bytes(result.detections),
-            file_name=f"{file_stem}_cells.csv",
-            mime="text/csv",
         )
 
 
@@ -200,6 +309,14 @@ def main() -> None:
 
     st.title("Transwell Cell Counter")
     st.caption("Upload stained Transwell images, count cells, and download annotated evidence images.")
+    with st.expander("What this app does", expanded=False):
+        st.markdown(
+            """
+            This app looks for solid purple/blue stained cells, then filters out hollow membrane pores by checking
+            shape, hollow ratio, and whether the object center is stained. After uploading an image, use **Compare**
+            to hold-toggle between the original image and the annotated result.
+            """
+        )
 
     params, show_numbers = sidebar_params()
     mode = st.radio("Mode", ["Single image", "Batch summary"], horizontal=True)

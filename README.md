@@ -25,6 +25,12 @@ The app is designed for images where cells are purple/blue stained and membrane 
 
 ## Try Online
 
+The public app is available here:
+
+https://xushaojie-transwell-cell-counter.hf.space/
+
+Users can open the URL directly, upload an image, inspect the annotated result, and download output images. No installation is required.
+
 Deploy this repository with one of these free web-app hosts:
 
 - Streamlit Community Cloud: connect your GitHub repository and set `app.py` as the app entry point.
@@ -49,11 +55,13 @@ http://localhost:8501
 
 ## Detection Logic
 
-1. Build a stain score from purple/blue color, saturation, darkness, and local background correction.
-2. Generate candidate regions with an adaptive threshold.
-3. Split touching cells using distance transform and watershed segmentation.
-4. Filter objects by area, solidity, hollow ratio, and center stain intensity.
-5. Draw circles on the original image and export a per-cell result table.
+The app does not simply threshold the whole image like a basic ImageJ workflow. It tries to separate solid stained cells from hollow membrane pores:
+
+1. It builds a stain score from purple/blue color, saturation, darkness, and local background correction.
+2. It creates candidate stained regions with an adaptive threshold.
+3. It separates touching cells using distance transform and watershed segmentation.
+4. It rejects likely pores by checking object area, solidity, hollow ratio, and whether the object center is actually stained.
+5. It draws circles on accepted cells so users can visually audit the count.
 
 ## Sample Result
 
