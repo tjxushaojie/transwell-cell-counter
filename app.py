@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import base64
 from io import BytesIO
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 from PIL import Image
 
 from transwell_counter import CounterParams, count_cells, load_rgb_image
@@ -19,11 +17,6 @@ def png_bytes(image: Image.Image) -> bytes:
     buffer = BytesIO()
     image.save(buffer, format="PNG")
     return buffer.getvalue()
-
-
-def image_data_uri(image: Image.Image) -> str:
-    encoded = base64.b64encode(png_bytes(image)).decode("ascii")
-    return f"data:image/png;base64,{encoded}"
 
 
 def csv_bytes(frame: pd.DataFrame) -> bytes:
@@ -108,98 +101,27 @@ def sidebar_params() -> tuple[CounterParams, bool]:
     return params, show_numbers
 
 
-def render_hold_compare(original: Image.Image, annotated: Image.Image) -> None:
-    original_uri = image_data_uri(original)
-    annotated_uri = image_data_uri(annotated)
-    components.html(
-        f"""
-        <style>
-          .tw-compare {{
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            max-width: 100%;
-          }}
-          .tw-frame {{
-            position: relative;
-            border: 1px solid #d8dde6;
-            border-radius: 8px;
-            overflow: hidden;
-            background: #f7f8fa;
-          }}
-          .tw-frame img {{
-            width: 100%;
-            display: block;
-            user-select: none;
-            -webkit-user-drag: none;
-          }}
-          .tw-badge {{
-            position: absolute;
-            left: 12px;
-            top: 12px;
-            background: rgba(17, 24, 39, 0.82);
-            color: #fff;
-            border-radius: 6px;
-            padding: 6px 10px;
-            font-size: 14px;
-            line-height: 1.2;
-          }}
-          .tw-button {{
-            margin-top: 10px;
-            border: 1px solid #c9ced8;
-            border-radius: 6px;
-            background: #ffffff;
-            color: #111827;
-            cursor: pointer;
-            font-size: 15px;
-            font-weight: 600;
-            padding: 8px 13px;
-          }}
-          .tw-button:active {{
-            background: #eef2f7;
-          }}
-          .tw-hint {{
-            color: #5b6472;
-            font-size: 13px;
-            margin-top: 7px;
-          }}
-        </style>
-        <div class="tw-compare">
-          <div class="tw-frame">
-            <img id="tw-image" src="{annotated_uri}" alt="Annotated Transwell image">
-            <div id="tw-badge" class="tw-badge">Annotated image</div>
-          </div>
-          <button id="tw-toggle" class="tw-button" type="button">Hold to view original</button>
-          <div class="tw-hint">Press and hold the button to hide circles. Release to return to the annotated result.</div>
-        </div>
-        <script>
-          const img = document.getElementById("tw-image");
-          const badge = document.getElementById("tw-badge");
-          const button = document.getElementById("tw-toggle");
-          const annotated = "{annotated_uri}";
-          const original = "{original_uri}";
+def resize_for_display(image: Image.Image, max_side: int = 1500) -> Image.Image:
+    width, height = image.size
+    if max(width, height) <= max_side:
+        return image
+    resized = image.copy()
+    resized.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
+    return resized
 
-          function showOriginal() {{
-            img.src = original;
-            badge.textContent = "Original image";
-          }}
-          function showAnnotated() {{
-            img.src = annotated;
-            badge.textContent = "Annotated image";
-          }}
 
-          button.addEventListener("mousedown", showOriginal);
-          button.addEventListener("mouseup", showAnnotated);
-          button.addEventListener("mouseleave", showAnnotated);
-          button.addEventListener("touchstart", function(event) {{
-            event.preventDefault();
-            showOriginal();
-          }}, {{ passive: false }});
-          button.addEventListener("touchend", showAnnotated);
-          button.addEventListener("touchcancel", showAnnotated);
-        </script>
-        """,
-        height=760,
-        scrolling=True,
+def render_compare(original: Image.Image, annotated: Image.Image) -> None:
+    choice = st.radio(
+        "View",
+        ["Annotated image", "Original image"],
+        horizontal=True,
+        label_visibility="collapsed",
     )
+    st.caption("Switch between the annotated result and the original image to check whether the count is reasonable.")
+    if choice == "Original image":
+        st.image(resize_for_display(original), use_column_width=True)
+    else:
+        st.image(resize_for_display(annotated), use_column_width=True)
 
 
 def render_result(image: Image.Image, params: CounterParams, file_stem: str, show_numbers: bool) -> None:
@@ -214,9 +136,9 @@ def render_result(image: Image.Image, params: CounterParams, file_stem: str, sho
 
     tabs = st.tabs(["Compare", "Annotated image", "Mask", "Stain score"])
     with tabs[0]:
-        render_hold_compare(image, result.annotated_image)
+        render_compare(image, result.annotated_image)
     with tabs[1]:
-        st.image(result.annotated_image, use_column_width=True)
+        st.image(resize_for_display(result.annotated_image), use_column_width=True)
         st.download_button(
             "Download annotated image",
             data=png_bytes(result.annotated_image),
@@ -224,7 +146,7 @@ def render_result(image: Image.Image, params: CounterParams, file_stem: str, sho
             mime="image/png",
         )
     with tabs[2]:
-        st.image(result.mask_image, use_column_width=True)
+        st.image(resize_for_display(result.mask_image), use_column_width=True)
         st.download_button(
             "Download mask",
             data=png_bytes(result.mask_image),
@@ -232,7 +154,7 @@ def render_result(image: Image.Image, params: CounterParams, file_stem: str, sho
             mime="image/png",
         )
     with tabs[3]:
-        st.image(result.score_image, use_column_width=True)
+        st.image(resize_for_display(result.score_image), use_column_width=True)
         st.download_button(
             "Download stain score",
             data=png_bytes(result.score_image),
@@ -305,10 +227,10 @@ def render_batch(params: CounterParams) -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title="Transwell Counter", page_icon=".", layout="wide")
+    st.set_page_config(page_title="StainSpot Counter", page_icon=".", layout="wide")
 
-    st.title("Transwell Cell Counter")
-    st.caption("Upload stained Transwell images, count cells, and download annotated evidence images.")
+    st.title("StainSpot Counter")
+    st.caption("Upload stained microscopy images, count solid stained objects, and download annotated evidence images.")
     with st.expander("What this app does", expanded=False):
         st.markdown(
             """
@@ -323,7 +245,7 @@ def main() -> None:
 
             **Not ideal for:** fluorescence nuclei, phase-contrast cells without color staining, overlapping dense
             cell sheets, or images where the target objects and background pores have the same color/shape.
-            Use **Compare** to hold-toggle between the original image and the annotated result.
+            Use **Compare** to switch between the original image and the annotated result.
             """
         )
 
