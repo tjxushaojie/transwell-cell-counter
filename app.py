@@ -27,6 +27,77 @@ def read_uploaded_image(uploaded_file) -> Image.Image:
     return load_rgb_image(uploaded_file.getvalue())
 
 
+def resize_for_analysis(image: Image.Image, max_side: int = 1600) -> tuple[Image.Image, float]:
+    width, height = image.size
+    scale = min(1.0, max_side / max(width, height))
+    if scale >= 1.0:
+        return image, 1.0
+    resized = image.copy()
+    resized.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
+    return resized, scale
+
+
+def scale_params_for_image(params: CounterParams, scale: float) -> CounterParams:
+    if scale >= 1.0:
+        return params
+    area_scale = scale * scale
+    return CounterParams(
+        sensitivity=params.sensitivity,
+        min_area=max(5, int(round(params.min_area * area_scale))),
+        max_area=max(20, int(round(params.max_area * area_scale))),
+        min_solidity=params.min_solidity,
+        max_hole_ratio=params.max_hole_ratio,
+        min_center_score=params.min_center_score,
+        split_distance=max(2, int(round(params.split_distance * scale))),
+        smooth_sigma=max(0.5, params.smooth_sigma * scale),
+        background_sigma=max(8.0, params.background_sigma * scale),
+        fill_holes_area=max(5, int(round(params.fill_holes_area * area_scale))),
+        exclude_border=params.exclude_border,
+    )
+
+
+def params_to_key(params: CounterParams) -> tuple:
+    return (
+        round(float(params.sensitivity), 4),
+        int(params.min_area),
+        int(params.max_area),
+        round(float(params.min_solidity), 4),
+        round(float(params.max_hole_ratio), 4),
+        round(float(params.min_center_score), 4),
+        int(params.split_distance),
+        round(float(params.smooth_sigma), 4),
+        round(float(params.background_sigma), 4),
+        int(params.fill_holes_area),
+        bool(params.exclude_border),
+    )
+
+
+def key_to_params(key: tuple) -> CounterParams:
+    return CounterParams(
+        sensitivity=float(key[0]),
+        min_area=int(key[1]),
+        max_area=int(key[2]),
+        min_solidity=float(key[3]),
+        max_hole_ratio=float(key[4]),
+        min_center_score=float(key[5]),
+        split_distance=int(key[6]),
+        smooth_sigma=float(key[7]),
+        background_sigma=float(key[8]),
+        fill_holes_area=int(key[9]),
+        exclude_border=bool(key[10]),
+    )
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def cached_count(image_bytes: bytes, params_key: tuple, show_numbers: bool, high_precision: bool):
+    image = load_rgb_image(image_bytes)
+    params = key_to_params(params_key)
+    analysis_image, scale = (image, 1.0) if high_precision else resize_for_analysis(image)
+    analysis_params = scale_params_for_image(params, scale)
+    result = count_cells(analysis_image, analysis_params, show_numbers=show_numbers)
+    return result, analysis_image.size, scale
+
+
 def sidebar_params() -> tuple[CounterParams, bool]:
     st.sidebar.header("Detection settings")
     with st.sidebar.expander("How to tune these settings", expanded=False):
@@ -87,6 +158,11 @@ def sidebar_params() -> tuple[CounterParams, bool]:
     )
     show_numbers = st.sidebar.checkbox("Show cell IDs", value=False)
     exclude_border = st.sidebar.checkbox("Exclude border objects", value=False)
+    high_precision = st.sidebar.checkbox(
+        "High precision full-size analysis",
+        value=False,
+        help="Slower. Use full image resolution instead of the faster preview-sized analysis.",
+    )
 
     params = CounterParams(
         sensitivity=sensitivity,
@@ -98,6 +174,7 @@ def sidebar_params() -> tuple[CounterParams, bool]:
         split_distance=split_distance,
         exclude_border=exclude_border,
     )
+    st.session_state["high_precision"] = high_precision
     return params, show_numbers
 
 
@@ -124,9 +201,20 @@ def render_compare(original: Image.Image, annotated: Image.Image) -> None:
         st.image(resize_for_display(annotated), use_column_width=True)
 
 
-def render_result(image: Image.Image, params: CounterParams, file_stem: str, show_numbers: bool) -> None:
+def render_result(
+    image: Image.Image,
+    image_bytes: bytes,
+    params: CounterParams,
+    file_stem: str,
+    show_numbers: bool,
+) -> None:
+    high_precision = bool(st.session_state.get("high_precision", False))
+
     with st.spinner("Analyzing image..."):
-        result = count_cells(image, params, show_numbers=show_numbers)
+        result, analysis_size, scale = cached_count(image_bytes, params_to_key(params), show_numbers, high_precision)
+
+    if scale < 1.0:
+        st.info(f"Fast mode: analyzed a {analysis_size[0]} x {analysis_size[1]} preview for speed. Enable high precision in the sidebar for full-size analysis.")
 
     metric_cols = st.columns(4)
     metric_cols[0].metric("Detected cells", f"{result.count}")
@@ -170,12 +258,13 @@ def render_single_image(params: CounterParams, show_numbers: bool) -> None:
         return
 
     try:
-        image = read_uploaded_image(uploaded)
+        image_bytes = uploaded.getvalue()
+        image = load_rgb_image(image_bytes)
     except Exception as exc:
         st.error(f"Could not read image: {exc}")
         return
 
-    render_result(image, params, Path(uploaded.name).stem, show_numbers)
+    render_result(image, image_bytes, params, Path(uploaded.name).stem, show_numbers)
 
 
 def render_batch(params: CounterParams) -> None:
