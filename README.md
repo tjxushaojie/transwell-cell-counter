@@ -40,6 +40,8 @@ After deployment, users only need to open the web URL and upload images. No Wind
 
 ## Run Locally
 
+### Web app
+
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\activate
@@ -52,6 +54,29 @@ Then open:
 ```text
 http://localhost:8501
 ```
+
+### Windows desktop app
+
+For sensitive microscopy images, use the local desktop app so images stay on your computer:
+
+```powershell
+pip install -r requirements-desktop.txt
+python desktop_app.py
+```
+
+To build a Windows distributable folder:
+
+```powershell
+.\scripts\build_windows.ps1
+```
+
+The executable will be created at:
+
+```text
+dist\StainSpotCounter\StainSpotCounter.exe
+```
+
+GitHub Actions also includes a manual `Build Windows App` workflow that can generate a downloadable Windows artifact.
 
 ## Detection Logic
 

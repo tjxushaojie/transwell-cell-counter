@@ -1,0 +1,6 @@
+numpy==1.26.4
+scipy==1.13.1
+scikit-image==0.24.0
+pillow==10.4.0
+pandas==2.2.2
+pyinstaller==6.11.1
