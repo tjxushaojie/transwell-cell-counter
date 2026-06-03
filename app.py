@@ -187,20 +187,6 @@ def resize_for_display(image: Image.Image, max_side: int = 1500) -> Image.Image:
     return resized
 
 
-def render_compare(original: Image.Image, annotated: Image.Image) -> None:
-    choice = st.radio(
-        "View",
-        ["Annotated image", "Original image"],
-        horizontal=True,
-        label_visibility="collapsed",
-    )
-    st.caption("Switch between the annotated result and the original image to check whether the count is reasonable.")
-    if choice == "Original image":
-        st.image(resize_for_display(original), use_column_width=True)
-    else:
-        st.image(resize_for_display(annotated), use_column_width=True)
-
-
 def render_result(
     image: Image.Image,
     image_bytes: bytes,
@@ -222,10 +208,8 @@ def render_result(
     metric_cols[2].metric("Mean area", f"{result.detections['area_px'].mean():.0f} px" if result.count else "-")
     metric_cols[3].metric("Median diameter", f"{result.detections['diameter_px'].median():.1f} px" if result.count else "-")
 
-    tabs = st.tabs(["Compare", "Annotated image", "Mask", "Stain score"])
+    tabs = st.tabs(["Annotated image", "Mask", "Stain score"])
     with tabs[0]:
-        render_compare(image, result.annotated_image)
-    with tabs[1]:
         st.image(resize_for_display(result.annotated_image), use_column_width=True)
         st.download_button(
             "Download annotated image",
@@ -233,7 +217,7 @@ def render_result(
             file_name=f"{file_stem}_annotated.png",
             mime="image/png",
         )
-    with tabs[2]:
+    with tabs[1]:
         st.image(resize_for_display(result.mask_image), use_column_width=True)
         st.download_button(
             "Download mask",
@@ -241,7 +225,7 @@ def render_result(
             file_name=f"{file_stem}_mask.png",
             mime="image/png",
         )
-    with tabs[3]:
+    with tabs[2]:
         st.image(resize_for_display(result.score_image), use_column_width=True)
         st.download_button(
             "Download stain score",
@@ -334,7 +318,7 @@ def main() -> None:
 
             **Not ideal for:** fluorescence nuclei, phase-contrast cells without color staining, overlapping dense
             cell sheets, or images where the target objects and background pores have the same color/shape.
-            Use **Compare** to switch between the original image and the annotated result.
+            Use **Annotated image** to visually check whether the circles match the stained objects.
             """
         )
 
