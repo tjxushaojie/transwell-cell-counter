@@ -9,37 +9,10 @@ import streamlit as st
 import streamlit.components.v1 as components
 from PIL import Image
 
-from transwell_counter import CounterParams, auto_tune_params, count_cells, load_rgb_image
+from transwell_counter import CounterParams, count_cells, load_rgb_image
 
 
 SUPPORTED_TYPES = ["tif", "tiff", "png", "jpg", "jpeg", "bmp"]
-PARAM_DEFAULTS = {
-    "sensitivity": 0.50,
-    "min_area": 70,
-    "max_area": 1800,
-    "min_solidity": 0.48,
-    "min_center_score": 0.22,
-    "max_hole_ratio": 0.32,
-    "split_distance": 11,
-    "show_numbers": False,
-    "exclude_border": False,
-}
-
-
-def ensure_param_state() -> None:
-    for key, value in PARAM_DEFAULTS.items():
-        st.session_state.setdefault(key, value)
-
-
-def apply_params_to_state(params: CounterParams) -> None:
-    st.session_state["sensitivity"] = float(params.sensitivity)
-    st.session_state["min_area"] = int(params.min_area)
-    st.session_state["max_area"] = int(params.max_area)
-    st.session_state["min_solidity"] = float(params.min_solidity)
-    st.session_state["min_center_score"] = float(params.min_center_score)
-    st.session_state["max_hole_ratio"] = float(params.max_hole_ratio)
-    st.session_state["split_distance"] = int(params.split_distance)
-    st.session_state["exclude_border"] = bool(params.exclude_border)
 
 
 def png_bytes(image: Image.Image) -> bytes:
@@ -62,7 +35,6 @@ def read_uploaded_image(uploaded_file) -> Image.Image:
 
 
 def sidebar_params() -> tuple[CounterParams, bool]:
-    ensure_param_state()
     st.sidebar.header("Detection settings")
     with st.sidebar.expander("How to tune these settings", expanded=False):
         st.markdown(
@@ -78,54 +50,50 @@ def sidebar_params() -> tuple[CounterParams, bool]:
             Change one setting at a time and re-check the overlay.
             """
         )
-    if st.sidebar.button("Reset defaults", use_container_width=True):
-        for key, value in PARAM_DEFAULTS.items():
-            st.session_state[key] = value
-        st.rerun()
     sensitivity = st.sidebar.slider(
         "Sensitivity",
         0.0,
         1.0,
-        key="sensitivity",
-        step=0.01,
+        0.50,
+        0.01,
         help="Higher values detect fainter cells, but may increase false positives.",
     )
-    min_area = st.sidebar.slider("Minimum area (px)", 10, 500, key="min_area", step=5)
-    max_area = st.sidebar.slider("Maximum area (px)", 300, 5000, key="max_area", step=50)
+    min_area = st.sidebar.slider("Minimum area (px)", 10, 500, 70, 5)
+    max_area = st.sidebar.slider("Maximum area (px)", 300, 5000, 1800, 50)
     min_solidity = st.sidebar.slider(
         "Minimum solidity",
         0.10,
         1.00,
-        key="min_solidity",
-        step=0.01,
+        0.48,
+        0.01,
         help="Higher values reject hollow or fragmented membrane pores.",
     )
     min_center_score = st.sidebar.slider(
         "Minimum center stain",
         0.00,
         1.00,
-        key="min_center_score",
-        step=0.01,
+        0.22,
+        0.01,
         help="Rejects ring-like objects whose centers are not stained.",
     )
     max_hole_ratio = st.sidebar.slider(
         "Maximum hollow ratio",
         0.00,
         0.90,
-        key="max_hole_ratio",
-        step=0.01,
+        0.32,
+        0.01,
         help="Lower values reject more ring-shaped pores.",
     )
     split_distance = st.sidebar.slider(
         "Cell splitting distance (px)",
         3,
         35,
-        key="split_distance",
-        step=1,
+        11,
+        1,
         help="Smaller values split close/touching cells more aggressively.",
     )
-    show_numbers = st.sidebar.checkbox("Show cell IDs", key="show_numbers")
-    exclude_border = st.sidebar.checkbox("Exclude border objects", key="exclude_border")
+    show_numbers = st.sidebar.checkbox("Show cell IDs", value=False)
+    exclude_border = st.sidebar.checkbox("Exclude border objects", value=False)
 
     params = CounterParams(
         sensitivity=sensitivity,
@@ -284,25 +252,6 @@ def render_single_image(params: CounterParams, show_numbers: bool) -> None:
     except Exception as exc:
         st.error(f"Could not read image: {exc}")
         return
-
-    tune_cols = st.columns([1, 3])
-    with tune_cols[0]:
-        auto_tune_clicked = st.button("Auto tune current image", type="secondary", use_container_width=True)
-    with tune_cols[1]:
-        st.caption("Auto tune tries several parameter sets and picks a conservative starting point. Inspect the overlay after tuning.")
-
-    if auto_tune_clicked:
-        with st.spinner("Auto tuning parameters..."):
-            tuned = auto_tune_params(image, params)
-        apply_params_to_state(tuned.params)
-        st.session_state["last_auto_tune"] = (
-            f"Auto tune evaluated {tuned.candidates_evaluated} options; "
-            f"estimated {tuned.estimated_count} cells on a preview image."
-        )
-        st.rerun()
-
-    if "last_auto_tune" in st.session_state:
-        st.success(st.session_state["last_auto_tune"])
 
     render_result(image, params, Path(uploaded.name).stem, show_numbers)
 
